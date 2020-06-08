@@ -1,17 +1,18 @@
-# Meaningful title for the repository
+# Mounds: ETL
+
 *pick type of repository (TOOL, ETL, ANALYSIS, ADMIN)*
 
 ---
 
 ## Purpose
-[In two to three sentences state the purpose of this repository, ideally tying it to an existing SDAM milestone. E.g., The purpose of this repository is to provide templates for all future SDAM repositories in order to save precious time and maintain high standards and uniformity of our documentation.]
+This repository contains scripts we use for preprocssing, cleaning, combaing and transforming different mound datasets, using both Python and R. 
 
 ---
 ## Authors
+* Vojtěch Kaše [![](https://orcid.org/sites/default/files/images/orcid_16x16.png)]([0000-0002-6601-1605](https://www.google.com/url?q=http://orcid.org/0000-0002-6601-1605&sa=D&ust=1588773325679000)), SDAM project, vojtech.kase@gmail.com
+* Adela Sobotkova [![](https://orcid.org/sites/default/files/images/orcid_16x16.png)](https://orcid.org/0000-0002-4541-3963), SDAM project, admin@ancientsocialcomplexity.org
 * Petra Hermankova [![](https://orcid.org/sites/default/files/images/orcid_16x16.png)](https://orcid.org/0000-0002-6349-0540), SDAM project, petra@ancientsocialcomplexity.org
-* [Name], [ORCID], [Institution], [email]
-* [Name], [ORCID], [Institution], [email]
-* [Name], [ORCID], [Institution], [email]
+* Antonio Rivero Ostoic [![](https://orcid.org/sites/default/files/images/orcid_16x16.png)]([ORCID: 0000-0001-8736-7152](https://orcid.org/0000-0001-8736-7152)), [jaro@cas.au.dk](mailto:jaro@cas.au.dk)
 
 ## License
 CC-BY-SA 4.0, see attached License.md
