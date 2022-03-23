@@ -1,0 +1,579 @@
+---
+title: "Grave_rank_symbols_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(ggplot2)
+library(plyr)
+library(EnvStats)
+```
+
+The following scripts will be a sort of visualisation of the different atributes of the mounds data. 
+
+I will start by looking into the "Grave rank symbol" as a symbol of the wealth related to a burial.
+
+I will start by deviding the data into the different periods. 
+
+```{r}
+Mounds_df <- read.csv("../data/Mounds_with_Spacial.csv")
+```
+Since the discriptions of "grave rank symbol" are quite long, i will start 
+
+I will sort out the datapoints with no period assigned to them.
+```{r}
+Mounds_df_with_periods <- Mounds_df[which(Mounds_df$Period != "Unknown"),]
+```
+
+Since the discriptions of "grave rank symbol" are quite long, i will start by adding a collums, only being the "number".
+
+```{r}
+Grave_rank_number <- c(rep(5, length(Mounds_df_with_periods$MoundID))) #Vector of 5's, this is so that one can detect the datapoints with no grave rank
+Grave_rank_number_levels <- c("0", "1", "1.5", "2", "3", "n")
+for (index in 1:length(Mounds_df_with_periods$MoundID))
+{
+  for (level in Grave_rank_number_levels)
+  {
+    if (substr(Mounds_df_with_periods$Grave.Rank.symbols[index], 1, 1) == level) #Checking that the first character is the level
+    {
+      Grave_rank_number[index] <- level
+    }
+  }
+}
+```
+I now have a vector with the only the grave rank number of each burial, and a "n" if the grave rank number isn't avaivable. 
+
+I will now add this as a collum to the dataframe
+
+```{r}
+Mounds_df_with_periods["Grave.rank.numbers"] <- Grave_rank_number
+```
+
+
+
+I will now subset the data into dataframes for each period. 
+
+I will start by defining the different periods:
+```{r}
+periods <- c("Transitional period", "Early Bronze Age", "Middle Bronze age", "Late Bronze Age", "Early Iron Age", "Classical and Hellenistic", "Roman period", "Late antiquity", "Early Byzantine", "First Bulgarian Kingdom","Middle Byzantine", "Second Bulgarian Kingdom", "Ottoman period", "Modern Bulgarian State")
+
+periods_abriviated <- c("TP", "EBA", "MBA", "LBA", "EIA1", "Cl & Hel", "RP", "LA", "EB", "FBK", "MB", "SBK", "OTT", "MBS")
+```
+
+I will quickly add a column to the dataframe, with the abriviated descriptions. 
+
+```{r}
+Periods_abriviated <- numeric(length(Mounds_df_with_periods$MoundID))
+for (index in 1:length(Mounds_df_with_periods$MoundID))
+{
+  for (period_index in 1:length(periods))
+       {
+         if (Mounds_df_with_periods$Period[index] == periods[period_index])
+         {
+           Periods_abriviated[index] <- periods_abriviated[period_index]
+         }
+       }
+}
+```
+```{r}
+Mounds_df_with_periods["Periods_Abriviated"] <- Periods_abriviated
+```
+
+
+Before examining the data, i will do a quick barplot of how many datapoints are assigned to each historical period.
+
+```{r}
+barplot(table(factor(Mounds_df_with_periods$Periods_Abriviated, levels = periods_abriviated)))
+#axis(1, at=1:17, labels=periods_abribiated)
+```
+
+It would now be interesting to examine the share of datapoints assigned the grave-rank-index-value 0, relative to the amount of datapoints. This will be done by doing a plot of the 95% confidence interval, using normal aproximation. 
+
+I will start by extracting the number of datapoints with grave rank symbol 0, in each period. 
+```{r}
+table(factor(Mounds_df_with_periods$Period, levels = periods))
+```
+
+I will start by extracting the share of burials with grave rank symbol: 0. in each period. 
+
+```{r}
+zero_grave_rank_by_period <- numeric(length(periods))
+no_grave_rank_by_period <- numeric(length(periods))
+total_observations_by_period <- numeric(length(periods))
+for (index in 1:length(periods))
+{
+  subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == periods[index]),]
+  subset_df_grave_rank <- subset_df[which(subset_df$Grave.rank.numbers == 0),]
+  subset_df_no_grave_rank <- subset_df[which(subset_df$Grave.rank.numbers == "n"),]
+  zero_grave_rank_by_period[index] <- length(subset_df_grave_rank$MoundID)
+  total_observations_by_period[index] <- length(subset_df$MoundID)
+  no_grave_rank_by_period[index] <- length(subset_df_no_grave_rank$MoundID)
+}
+zero_grave_rank_by_period
+total_observations_by_period
+
+```
+As seen above, no datapoints have been assigned the cultural period "Early Byzantine" and "Modern bulgarian state. For this reason i will clean these two periods away.
+
+```{r}
+periods_with_data <- !total_observations_by_period==0
+total_observations_by_period <- total_observations_by_period[!total_observations_by_period==0]
+zero_grave_rank_by_period <- zero_grave_rank_by_period[!zero_grave_rank_by_period==0]
+grave_rank_share_by_period <- zero_grave_rank_by_period/total_observations_by_period
+periods_cleaned <- periods[periods_with_data]
+periods_abriviated_cleaned <- periods_abriviated[periods_with_data]
+```
+
+```{r}
+periods_cleaned
+```
+
+The following confidence intervals are based on the "central limit theorem". To use this, i need to be sure, that the amount of data is sufficient. For the amount of data to be sufficient. If $p_i$ is the share of burial with grave-rank-symbol-value 0 and $n_i$ is the number burials both in period i. For the normal-approximation through the central limit-theorem to be accurate, i need that $n_i \cdot p_i \geq 5$ and $n_i \cdot (1-p_i) \geq 5$
+
+```{r}
+grave_rank_share_by_period*total_observations_by_period
+```
+```{r}
+(1-grave_rank_share_by_period)*total_observations_by_period 
+```
+The data is then sufficient for "normal" aprroximation. I will do this, using the method described in the book "mathmatical resampling using R."
+
+I will start by creating the upper and lower bounds of the 95-percent confidence intervals. 
+
+```{r}
+confidence_lower_bound <- numeric(length(zero_grave_rank_by_period))
+confidence_upper_bound <- numeric(length(zero_grave_rank_by_period))
+for (index in 1:length(zero_grave_rank_by_period))
+{
+  p <- grave_rank_share_by_period[index]
+  n <- total_observations_by_period[index]
+  confidence_lower_bound[index] <- p - 1.96*(sqrt((p*(1-p))/n))
+  confidence_upper_bound[index] <- p + 1.96*(sqrt((p*(1-p))/n))
+}
+```
+
+
+```{r}
+x = (1:length(confidence_lower_bound))
+plot(confidence_lower_bound, type = "l", ylim = c(0,1),  xaxt='n', xlab = "Periods", ylab = "Share of grave-rank-symbol-value 0")
+lines(confidence_upper_bound)
+polygon(c(x, rev(x)), c(confidence_upper_bound, rev(confidence_lower_bound)),
+        col = "green")
+axis(1, at=1:length(confidence_lower_bound), labels=periods_abriviated_cleaned)
+```
+
+I will now quickly add to this, by making a similar plot for the share of burials with no grave-rank-symbol. 
+
+When i created the vector of the number of burials with grave-rank_symbol-value:0 for each period earlier, i also created one with the number of observations with no grave rank. I will use that one now. 
+```{r}
+no_grave_rank_by_period
+```
+
+I will again clean away "early byzantine" and "modern bulgarian state" since there aren't any datapoints from these periods.
+```{r}
+no_grave_rank_by_period_cleaned <-no_grave_rank_by_period[periods_with_data]
+no_grave_rank_by_period_cleaned
+```
+Since "middle bronze age" has no burials with "no-grave-rank-symbol". This will need to be fixed when calculating the confidense interval. 
+
+I will now find the share of burials with no grave_rank_symbol by period.
+```{r}
+share_no_grave_rank <- no_grave_rank_by_period_cleaned/total_observations_by_period
+share_no_grave_rank
+```
+
+I will now check if there are enough data for normal approximation. I know that there is a problem with "middle bronze age" because there are no burials with no grave rank here. But exactly because there are no observations of this classification, it can be fixed.
+
+As before i will check the data:
+```{r}
+share_no_grave_rank * total_observations_by_period
+```
+
+```{r}
+(1 - share_no_grave_rank) * total_observations_by_period
+```
+I can now see that apart from "middle bronze age", there is enough data. 
+
+I will now create the 95% confidence intervals for each period. 
+
+The problem with the "middle bronze age" can be fixed because there are no burial with grave-rank-index:0. Because of this, if $n_{\text{middle bronze age}} \geq 30$, which it is actually not, a 95% confidence interval is $(0, \frac{3}{n})$. I will use this:
+
+```{r}
+confidence_lower_bound_no_rank <- numeric(length(share_no_grave_rank))
+confidence_upper_bound_no_rank <- numeric(length(share_no_grave_rank))
+for (index in 1:length(zero_grave_rank_by_period))
+{
+  p <- share_no_grave_rank[index]
+  n <- total_observations_by_period[index]
+  if(p != 0)
+  {
+  confidence_lower_bound_no_rank[index] <- p - 1.96*(sqrt((p*(1-p))/n))
+  confidence_upper_bound_no_rank[index] <- p + 1.96*(sqrt((p*(1-p))/n))
+  }
+  else
+  {
+    confidence_lower_bound_no_rank[index] <- 0
+    confidence_upper_bound_no_rank[index] <- 3/n
+  }
+}
+```
+
+```{r}
+x = (1:length(confidence_lower_bound_no_rank))
+plot(confidence_lower_bound_no_rank, type = "l", ylim = c(0,1),  xaxt='n', xlab = "Periods", ylab = "Share of no grave-rank-symbol")
+lines(confidence_upper_bound_no_rank)
+polygon(c(x, rev(x)), c(confidence_upper_bound_no_rank, rev(confidence_lower_bound_no_rank)),
+        col = "blue")
+axis(1, at=1:length(confidence_lower_bound_no_rank), labels=periods_abriviated_cleaned)
+```
+
+# Share of "grave rank symbol" by period compared
+
+I will now plot the share of differnt grave-rank-index' through the different periods. It will be done as two seperate plots, to make it easier to understand. 
+```{r}
+subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == periods[1]),]
+Grave_table <- table(factor(subset_df$Grave.rank.numbers, levels = Grave_rank_number_levels))/length(subset_df$MoundID)
+plot(Grave_table, type = "l", col=1, ylim = c(0,1),xlab = "Grave rank symbols", ylab = "Share of Grave-rank-symbols")
+n = 2
+for (period in periods[2:6])
+{
+  subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == period),]
+  Grave_table <- table(factor(subset_df$Grave.rank.numbers, levels = Grave_rank_number_levels))/length(subset_df$MoundID)
+lines(Grave_table, type = "l", col=n, ylim = c(0,1))
+n = n+1
+}
+legend(x = "top",  
+      legend = periods[1:6],
+      col = c(1, 2, 3, 4, 5, 6),
+      lwd = 2,
+      cex = 0.75)
+```
+```{r}
+subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == periods[7]),]
+Grave_table <- table(factor(subset_df$Grave.rank.numbers, levels = Grave_rank_number_levels))/length(subset_df$MoundID)
+plot(Grave_table, type = "l", col=1, ylim = c(0,1),xlab = "Grave rank symbols", ylab = "Share of Grave-rank-symbols")
+n = 2
+for (period in periods[8:14])
+{
+  subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == period),]
+  Grave_table <- table(factor(subset_df$Grave.rank.numbers, levels = Grave_rank_number_levels))/length(subset_df$MoundID)
+lines(Grave_table, type = "l", col=n, ylim = c(0,1))
+n = n+1
+}
+legend(x = "top",  
+      legend = periods[7:14],
+      col = c(1:9),
+      lwd = 2,
+      cex = 0.75)
+```
+I the following i will assign the burials with no grave rank symbol, the grave-rank-value: 0 and look at the data again. 
+
+```{r}
+grave_rank_numbers_cleaned <- numeric(length(Mounds_df_with_periods$MoundID))
+for (index in 1:length(Mounds_df_with_periods$MoundID))
+{
+  if (Mounds_df_with_periods$Grave.rank.numbers[index] != "n")
+  {
+    grave_rank_numbers_cleaned[index] <- Mounds_df_with_periods$Grave.rank.numbers[index]
+  }
+  else
+  {
+    grave_rank_numbers_cleaned[index] <- "0"
+  }
+}
+Mounds_df_with_periods["grave_rank_numbers_cleaned"] <- grave_rank_numbers_cleaned
+```
+
+I will now look to do the same plot as above, but with the new data.
+
+```{r}
+subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == periods[1]),]
+Grave_table <- table(factor(subset_df$grave_rank_numbers_cleaned, levels = Grave_rank_number_levels[1:5]))/length(subset_df$MoundID)
+plot(Grave_table, type = "l", col=1, ylim = c(0,1),xlab = "Grave rank symbols", ylab = "Share of Grave-rank-symbols")
+n = 2
+for (period in periods[2:6])
+{
+  subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == period),]
+  Grave_table <- table(factor(subset_df$grave_rank_numbers_cleaned, levels = Grave_rank_number_levels[1:5]))/length(subset_df$MoundID)
+lines(Grave_table, type = "l", col=n, ylim = c(0,1))
+n = n+1
+}
+legend(x = "top",  
+      legend = periods[1:6],
+      col = c(1, 2, 3, 4, 5, 6),
+      lwd = 2,
+      cex = 0.75)
+```
+```{r}
+subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == periods[7]),]
+Grave_table <- table(factor(subset_df$grave_rank_numbers_cleaned, levels = Grave_rank_number_levels[1:5]))/length(subset_df$MoundID)
+plot(Grave_table, type = "l", col=1, ylim = c(0,1),xlab = "Grave rank symbols", ylab = "Share of Grave-rank-symbols")
+n = 2
+for (period in periods[8:14])
+{
+  subset_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == period),]
+  Grave_table <- table(factor(subset_df$grave_rank_numbers_cleaned, levels = Grave_rank_number_levels[1:5]))/length(subset_df$MoundID)
+lines(Grave_table, type = "l", col=n, ylim = c(0,1))
+n = n+1
+}
+legend(x = "top",  
+      legend = periods[7:14],
+      col = c(1, 2, 3, 4, 5, 6, 7),
+      lwd = 2,
+      cex = 0.75)
+```
+
+Looking at the above, it seems that there are clusters with similar distributions. The question is then, would it be fair to use a more crude periodisation, ie "prehistory: 6200 bc to 1100bc, "iron age: 1100 bc to 70 bc", "Roman Antiquity": 70bc to 600 ac, and "Mediaeval period": 600 ac to 1700 ac.
+
+I will start by testing if it would be fair to assume that the different grave rank index' would be simularly distributed in the transitional period, early-, middle- and late- bronzeage.
+
+These are the first four periods in the "periods" vector. 
+```{r}
+#I will start by creating a 4x6 matrix for storring data. The rows will be the four periods, the columns will be the six classifications.
+pre_history_matrix <- matrix(nrow= 4,ncol=5)
+for (row in 1:length(periods[1:4]))
+  {
+  for (column in 1:length(Grave_rank_number_levels[1:5]))
+  {
+    Period_and_grave_rank_df <-Mounds_df_with_periods[
+      which(Mounds_df_with_periods$Period == periods[row] &
+        Mounds_df_with_periods$grave_rank_numbers_cleaned == Grave_rank_number_levels[column]),]
+  pre_history_matrix[row, column] <- length(Period_and_grave_rank_df$MoundID)
+  }
+  }
+```
+```{r}
+pre_history_matrix
+```
+Looking at this, it is not possible to do an exact test, as not all entrances in the matrix is above 0. 
+
+
+
+I will try to instead test if the number of burials assigned as grave rank 0, is the same in the period. The nul hypothesis then becomes that each of the four periods has the same distribution of grave-ranks-0's
+
+```{r}
+pre_history_matrix_simplified <- matrix(nrow= 4,ncol=2)
+pre_history_matrix_simplified[, 1] <- pre_history_matrix[, 1]
+pre_history_matrix_simplified[, 2] <- pre_history_matrix[, 2] + pre_history_matrix[, 3] + pre_history_matrix[, 4] + pre_history_matrix[, 5]
+pre_history_matrix_simplified
+```
+It seems that the "late bronze age" differs quite a lot from the rest of the data.
+I will do a test for wrether one would be able to assume that all four periods are distributed the same, and one for wrether only the first three are.
+```{r}
+chisq.test(pre_history_matrix_simplified)
+```
+Looking at this, it is then fair to assume that the distribution of the the share of burials with grave-rank-value 0, is the same in all four periods. 
+
+I will quickly do the same for iron age, this will be the periods assigned as:
+"Early Iron Age 1", "Early Iron Age 2", "Classical" and "Hellenistic":
+```{r}
+periods[5:8]
+```
+
+```{r}
+Iron_age_matrix <- matrix(nrow= 2,ncol=5)
+for (row in 1:length(periods[5:6]))
+  {
+  for (column in 1:length(Grave_rank_number_levels[1:5]))
+  {
+    periods_subset <- periods[5:6]
+    Period_and_grave_rank_df <-Mounds_df_with_periods[
+      which(Mounds_df_with_periods$Period == periods_subset[row] &
+        Mounds_df_with_periods$grave_rank_numbers_cleaned == Grave_rank_number_levels[column]),]
+  Iron_age_matrix[row, column] <- length(Period_and_grave_rank_df$MoundID)
+  }
+  }
+```
+
+```{r}
+Iron_age_matrix
+```
+
+
+I am again having problems with 0's in the matrix. I will need to simplify the matrix again. This time i think i can say that each period is multinomialy distributed with three factors, the onces described assigned Grave.Rank: 0, the ones assigned grave.Rank:1 and the rest.
+```{r}
+Iron_age_matrix_simplified <- matrix(nrow= 2,ncol=2)
+Iron_age_matrix_simplified[, 1] <- Iron_age_matrix[, 1]
+Iron_age_matrix_simplified[, 2] <-Iron_age_matrix[, 2] + Iron_age_matrix[, 3] + Iron_age_matrix[, 4] + Iron_age_matrix[, 5]
+Iron_age_matrix_simplified
+```
+
+Again we get the same 
+```{r}
+chisq.test(Iron_age_matrix_simplified)
+```
+Again we can see that is is okay to assume that the share of burials with grave rank value 0 is the same in "Early iron age" and "Hellenistic and Classical"
+
+
+
+Seing that the "Early iron age" and "Hellenistic and Classical" periods are very simularly distributed, i will try to fit a model to the data. 
+
+I will start by looking at the distribution as is:
+```{r}
+Iron_age_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == "Early Iron Age"|                              Mounds_df_with_periods$Period == "Classical and Hellenistic"),]
+```
+I will now plot the distribution:
+```{r}
+barplot(table(factor(Iron_age_df$Grave.rank.numbers, levels = Grave_rank_number_levels[1:5])))
+```
+
+In both models i will need to assume some values for the different grave-rank-index'. In Both scenarios i will let "graverank index: 0" get the value of the starting point of the distribution, and then let the following ranks get the value one larger than the previous. 
+
+I will do this in two different ways. The first will be a pereto distribution. The Pereto distribution need a startingpoint $x_m > 0$, i will assume $x_m = 1$.
+
+Having done this, i will as descirbed before assign the datapoints given the grave rank:0, the value 1, the datapoints assigned the grave rank: 1, the value 2 and so on:
+```{r}
+pareto_value <- numeric(length(Iron_age_df$grave_rank_numbers_cleaned))
+for (i in 1:length(Iron_age_df$grave_rank_numbers_cleaned))
+{
+  pareto_value[i] <- as.numeric(Iron_age_df$grave_rank_numbers_cleaned[i])+1
+}
+```
+I will quickly look at these values:
+```{r}
+pareto_value
+```
+
+I will now use the method of moments to fit the find the parameter of the pareto distrebution fitting the data the best. What i will do is letting the theoretical mean be equal to the empirical mean, and use this to find the parameter $\alpha$.
+
+I will assume that $\alpha >1$, so that a thoeretical mean actually exists and let $\mu$ denote the empirical mean. 
+$$\mu = \frac{\alpha x_m}{(\alpha -1)} \Leftrightarrow \mu(\alpha - 1) = \alpha x_m$$
+$$ \Leftrightarrow \mu \alpha - \mu = \alpha x_m$$
+$$\Leftrightarrow \mu \alpha -\alpha x_m = \mu$$
+$$\Leftrightarrow \alpha(\mu -x_m) = \mu$$
+$$\Leftrightarrow \alpha = \frac{\mu}{\mu -x_m}$$
+Earlier i assumed a starting point $x_m = 1$ using this i get that:
+```{r}
+mu <- mean(pareto_value)
+x_m <- 1
+alpha <- mu/(mu-x_m)
+alpha
+```
+
+I will now try to look at if the distribution fits the data:
+```{r}
+v <- seq(from = 1, to = 4, by = 0.01)
+pdf_of_pareto <- (alpha/v^(alpha + 1))
+```
+
+```{r}
+count_pareto <- count(pareto_value)
+plot(count_pareto$x, (count_pareto$freq)/length(Iron_age_df$MoundID), type = "l", col = "blue", ylim = c(0,1))
+lines(v, pdf_of_pareto)
+```
+
+Using a similar approch i will try to fit a poisson distribution over the data. 
+
+The starting value of a poisson distribution is 0, therefore i will assign the datapoints assigned grave rank index: 0, the value 0 and so on.
+
+```{r}
+Poisson_value <- numeric(length(Iron_age_df$MoundID))
+for (i in 1:length(Iron_age_df$MoundID))
+{
+  Poisson_value[i] <- as.numeric(Iron_age_df$grave_rank_numbers_cleaned[i])
+}
+```
+```{r}
+Poisson_value
+```
+
+using the method of moments is quite a lot easier here, since the theoretical mean of a poisson distribution is the parameter.
+
+```{r}
+lambda <- mean(Poisson_value)
+lambda
+```
+```{r}
+count_poisson <- count(Poisson_value)
+plot(count_poisson$x, (count_poisson$freq)/length(Iron_age_df$MoundID), type = "l", col = "blue", ylim = c(0,1), xlab = "Grave Rank Symbol")
+Poisson_input <- c(0, 1, 2, 3)
+Poisson_output <- dpois(Poisson_input, lambda)
+lines(Poisson_input, Poisson_output, col = "green")
+legend(x = "topright", legend = c("EPMF", "Poisson aproximation"),
+      col = c("blue", "green"),
+      lwd = 2,
+      cex = 0.75)
+```
+
+I will now check i one could assume that it follows a poisson distribution. 
+```{r}
+Poisson_output[4] <- 1- sum(Poisson_output[1:3])
+Poisson_output[4]
+```
+
+```{r}
+expected_poisson <- Poisson_output*length(Iron_age_df$MoundID)
+observed <- count_poisson$freq
+matrix_poisson <- rbind(expected_poisson, observed)
+matrix_poisson
+```
+
+```{r}
+chisq.test(matrix_poisson)
+```
+This shows that one cannot assume that the distribution of grave rank symbol follows the same distribution as this poisson distribution. 
+
+
+Since data did not contratict the assumption that "Transitional period", "Early Bronze Age", and "Middle Bronze age" were similarly distriputed, i will also try to model this like i have already done:
+```{r}
+transitional_bronze_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == "Transitional period"|
+                                            Mounds_df_with_periods$Period == "Early Bronze Age"|
+                                              Mounds_df_with_periods$Period == "Middle Bronze age" |
+                                              Mounds_df_with_periods$Period == "Late Bronze age"),]
+```
+
+
+Just like earlier, i would like to "fit" a Perato-distribution on the data. I will again assign the burials with grave rank symbol: 0, the value 1, the burials with grave rank symbol: 1, the value 2 and so on, and let the startingpoint be $x_m = 1$:
+
+```{r}
+perato_values_bronze <- numeric(length(transitional_bronze_df$MoundID))
+for (i in 1:length(transitional_bronze_df$MoundID))
+{
+  perato_values_bronze[i] <- as.numeric(transitional_bronze_df$grave_rank_numbers_cleaned[i])+1
+}
+perato_values_bronze
+```
+
+Using the formula from earlier i can fit a pareto distribution.
+
+```{r}
+mu <- mean(perato_values_bronze)
+mu
+x_m <- 1
+alpha <- mu/(mu-x_m)
+alpha
+```
+```{r}
+v <- seq(from = 1, to = 4, by = 0.01)
+pdf_of_pareto <- (alpha/v^(alpha + 1))
+count_pareto <- count(perato_values_bronze)
+plot(count_pareto$x, (count_pareto$freq)/length(transitional_bronze_df$MoundID), type = "l", col = "blue", ylim = c(0,1))
+lines(v, pdf_of_pareto)
+```
+
+```{r}
+share_smaller_then_1.5 <- ppareto(1.5, x_m, shape = alpha)
+share_smaller_then_2.5 <- ppareto(2.5, x_m, shape = alpha)- ppareto(1.5, x_m, shape = alpha)
+share_smaller_then_3.5 <- ppareto(3.5, x_m, shape = alpha) - ppareto(2.5, x_m, shape = alpha)
+share_rest <- 1 - ppareto(3.5, x_m, shape = alpha)
+```
+
+I will now try to fit a poisson distribution over the data.
+```{r}
+Poisson_value <- numeric(length(transitional_bronze_df$MoundID))
+for (i in 1:length(transitional_bronze_df$MoundID))
+{
+  Poisson_value[i] <- as.numeric(transitional_bronze_df$grave_rank_numbers_cleaned[i])
+}
+lambda <- mean(Poisson_value)
+count_poisson <- count(Poisson_value)
+plot(count_poisson$x, (count_poisson$freq)/length(transitional_bronze_df$MoundID), type = "l", col = "blue", ylim = c(0,1), xlab = "Grave Rank Symbol")
+Poisson_input <- c(0, 1, 2, 3)
+Poisson_output <- dpois(Poisson_input, lambda)
+lines(Poisson_input, Poisson_output, col = "green")
+#legend(x = "topright", legend = c("EPMF", "Poisson aproximation"),
+      #col = c("blue", "green"),
+```
