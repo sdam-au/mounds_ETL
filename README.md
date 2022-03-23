@@ -7,6 +7,12 @@
 ## Purpose
 This repository contains scripts we use for preprocssing, cleaning, combaing and transforming different mound datasets, using both Python and R. 
 
+This repositary has multipull purposes. The script "EXPLORING-MOUNDS-IN-GSHEETS" seeks to begin exploring the mounds dataset, aswell as extracting some temporal data, in the form of a start and enddate for burials in the "Izvestia dataset", where the data has not been storred as numerical data. 
+
+The "Exploring_mounds_periods" scrips also has multiple purposes. The main purpose of the scrips is to examine how many of these mounds have been used over multiple periods in time, and examine when these were. aswell as doing this, the dataset seeks to assign each burial to a cultural period for further analysis in another script.
+
+The script "Grave_rank_symbols_analysis" seeks to use the classifications from the previous script, to explore and analyse the concept of "grave rank symbols". A way of assigning each burial a rank, depending on the "value" of the grave.
+
 ---
 ## Authors
 * Vojtěch Kaše [![](https://orcid.org/sites/default/files/images/orcid_16x16.png)]([0000-0002-6601-1605](https://www.google.com/url?q=http://orcid.org/0000-0002-6601-1605&sa=D&ust=1588773325679000)), SDAM project, vojtech.kase@gmail.com
@@ -25,6 +31,7 @@ CC-BY-SA 4.0, see attached License.md
 
 ---
 # How to use this repository
+
 
 ## Sources and prerequisites
 [Describe the provenance of data used in the scripts contained and clarify how it is harvested and what other prerequisites are required to get the scripts working. In case of pure tool attribute any reused scripts to source, etc., license and specify any prerequisites or technical requirements.]
