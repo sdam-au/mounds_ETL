@@ -12,24 +12,46 @@ library(plyr)
 library(EnvStats)
 ```
 
+There are two ways of loading the data:
+
+If you have the data storred locally as a CSV file:
+
+```{r}
+#Mounds_df <- read.csv("../data/Mounds_with_Spacial.csv")
+```
+
+Or if you want to run it from google sheets.
+The data for this script was created in the python script Exploring_mounds_periods.ipynb in the same repository as this one. You need to go through that script first, to create the data.
+:
+
+```{r}
+library(googlesheets4)
+Mounds_df <- read_sheet("https://docs.google.com/spreadsheets/d/1squa2X1kCHVMmJm3H8KhtG_rAyouL-50i9e8ggxvMSE/edit#gid=0", sheet = 1)
+```
+
+When pulling the data from Google sheets, the following code is needed. This is because we want the column "grave rank symbols" to be called "Grave.Rank.symbols". If running the data locally this would not be nessesary, as the column would alreadyhave the right name. 
+```{r}
+names(Mounds_df)[names(Mounds_df) == "Grave Rank symbols"] <- "Grave.Rank.symbols"
+```
+
+
 The following scripts will be a sort of visualisation of the different atributes of the mounds data. 
 
-I will start by looking into the "Grave rank symbol" as a symbol of the wealth related to a burial.
+I will  be looking into the "Grave rank symbol" as a symbol of the wealth related to a burial.
 
 I will start by deviding the data into the different periods. 
 
-```{r}
-Mounds_df <- read.csv("../data/Mounds_with_Spacial.csv")
-```
 Since the discriptions of "grave rank symbol" are quite long, i will start 
 
-I will sort out the datapoints with no period assigned to them.
+I will now leave out the datapoints with no period assigned to them.
 ```{r}
 Mounds_df_with_periods <- Mounds_df[which(Mounds_df$Period != "Unknown"),]
 ```
 
 Since the discriptions of "grave rank symbol" are quite long, i will start by adding a collums, only being the "number".
 
+
+In the following you might have to 
 ```{r}
 Grave_rank_number <- c(rep(5, length(Mounds_df_with_periods$MoundID))) #Vector of 5's, this is so that one can detect the datapoints with no grave rank
 Grave_rank_number_levels <- c("0", "1", "1.5", "2", "3", "n")
@@ -44,6 +66,7 @@ for (index in 1:length(Mounds_df_with_periods$MoundID))
   }
 }
 ```
+
 I now have a vector with the only the grave rank number of each burial, and a "n" if the grave rank number isn't avaivable. 
 
 I will now add this as a collum to the dataframe
@@ -411,6 +434,8 @@ Again we can see that is is okay to assume that the share of burials with grave 
 
 Seing that the "Early iron age" and "Hellenistic and Classical" periods are very simularly distributed, i will try to fit a model to the data. 
 
+## Fitting models on the Iron age data
+
 I will start by looking at the distribution as is:
 ```{r}
 Iron_age_df <- Mounds_df_with_periods[which(Mounds_df_with_periods$Period == "Early Iron Age"|                              Mounds_df_with_periods$Period == "Classical and Hellenistic"),]
@@ -432,10 +457,12 @@ for (i in 1:length(Iron_age_df$grave_rank_numbers_cleaned))
   pareto_value[i] <- as.numeric(Iron_age_df$grave_rank_numbers_cleaned[i])+1
 }
 ```
+
 I will quickly look at these values:
-```{r}
-pareto_value
-```
+
+To estimeate the shape-parameter of a Pareto-distribution i will try two different approaches. The fist is to use the "method of moments" to estimate the parameter, the second approach is to use Makimum likelyhood estimation. 
+
+## approximating alpha using methond of moments
 
 I will now use the method of moments to fit the find the parameter of the pareto distrebution fitting the data the best. What i will do is letting the theoretical mean be equal to the empirical mean, and use this to find the parameter $\alpha$.
 
@@ -452,18 +479,40 @@ x_m <- 1
 alpha <- mu/(mu-x_m)
 alpha
 ```
+# Using maximum likelyhood
+
+```{r}
+alpha_MLE <- length(pareto_value)/sum(log(pareto_value/x_m))
+alpha_MLE
+```
+
 
 I will now try to look at if the distribution fits the data:
 ```{r}
 v <- seq(from = 1, to = 4, by = 0.01)
 pdf_of_pareto <- (alpha/v^(alpha + 1))
+pdf_of_pareto_MLE <- (alpha_MLE/v^(alpha_MLE + 1))
 ```
 
 ```{r}
-count_pareto <- count(pareto_value)
-plot(count_pareto$x, (count_pareto$freq)/length(Iron_age_df$MoundID), type = "l", col = "blue", ylim = c(0,1))
-lines(v, pdf_of_pareto)
+count_pareto$
 ```
+
+```{r}
+
+#count_pareto <- count(pareto_value)
+
+count_pareto <- count(data.frame(pareto_value))
+plot(count_pareto$pareto_value, (count_pareto$freq)/length(Iron_age_df$MoundID), type = "l", col = 1, ylim = c(0,1))
+lines(v, pdf_of_pareto, col = 2)
+lines(v, pdf_of_pareto_MLE, col = 3)
+legend(x = "top",  
+      legend = c("Grave-rank-share", "Pareto using method of moments", "Pareto using MLE"),
+      col = c(1, 2, 3),
+      lwd = 2,
+      cex = 0.75)
+```
+
 
 Using a similar approch i will try to fit a poisson distribution over the data. 
 
@@ -539,27 +588,59 @@ perato_values_bronze
 
 Using the formula from earlier i can fit a pareto distribution.
 
+## Estimating alpha using method of moments
+
 ```{r}
-mu <- mean(perato_values_bronze)
-mu
-x_m <- 1
-alpha <- mu/(mu-x_m)
-alpha
+mu_bronze <- mean(perato_values_bronze)
+mu_bronze
+x_m_bronze <- 1
+alpha_bronze <- mu_bronze/(mu_bronze-x_m_bronze)
+alpha_bronze
 ```
+## Estimating alpha using MLE
+```{r}
+alpha_MLE_bronze <- length(perato_values_bronze)/sum(log(perato_values_bronze/x_m_bronze))
+alpha_MLE_bronze
+```
+
 ```{r}
 v <- seq(from = 1, to = 4, by = 0.01)
-pdf_of_pareto <- (alpha/v^(alpha + 1))
+pdf_of_pareto_bronze <- (alpha/v^(alpha + 1))
+pdf_of_pareto_bronze_MLE <- (alpha_MLE_bronze/v^(alpha_MLE_bronze + 1))
 count_pareto <- count(perato_values_bronze)
-plot(count_pareto$x, (count_pareto$freq)/length(transitional_bronze_df$MoundID), type = "l", col = "blue", ylim = c(0,1))
-lines(v, pdf_of_pareto)
+plot(count_pareto$x, (count_pareto$freq)/length(transitional_bronze_df$MoundID), type = "l", col = 1, ylim = c(0,1))
+lines(v, pdf_of_pareto_bronze, col = 2)
+lines(v, pdf_of_pareto_bronze_MLE, col = 3)
+legend(x = "top",  
+      legend = c("Grave-rank-share", "Pareto using method of moments", "Pareto using MLE"),
+      col = c(1, 2, 3),
+      lwd = 2,
+      cex = 0.75)
 ```
+
 
 ```{r}
 share_smaller_then_1.5 <- ppareto(1.5, x_m, shape = alpha)
 share_smaller_then_2.5 <- ppareto(2.5, x_m, shape = alpha)- ppareto(1.5, x_m, shape = alpha)
 share_smaller_then_3.5 <- ppareto(3.5, x_m, shape = alpha) - ppareto(2.5, x_m, shape = alpha)
 share_rest <- 1 - ppareto(3.5, x_m, shape = alpha)
+theoreticel_pareto_Bronze <- c(share_smaller_then_1.5, share_smaller_then_2.5, share_smaller_then_3.5,share_rest) *length(transitional_bronze_df$MoundID)
+
+pareto_matrix_bronze_age <- rbind(theoreticel_pareto_Bronze, count_pareto$freq)
+pareto_matrix_bronze_age
 ```
+Again i have a problem with too few datapoints. I then need to change the test. instead i will test for if the share of burials with grave-rank-symbol follows what it should be in this Pareto distribution.
+
+```{r}
+pareto_matrix_bronze_age_simplified <- matrix(nrow= 2,ncol=2)
+pareto_matrix_bronze_age_simplified[, 1] <- pareto_matrix_bronze_age[,1]
+pareto_matrix_bronze_age_simplified[,2] <- pareto_matrix_bronze_age[,2] + pareto_matrix_bronze_age[,3] + pareto_matrix_bronze_age[,4]
+pareto_matrix_bronze_age_simplified
+```
+```{r}
+chisq.test(pareto_matrix_bronze_age_simplified)
+```
+This shows data does not support the conclusion, that the share of burials with "grave-rank-symbol-value: 0" follows the share exepected in this pareto distribution. 
 
 I will now try to fit a poisson distribution over the data.
 ```{r}
@@ -577,3 +658,5 @@ lines(Poisson_input, Poisson_output, col = "green")
 #legend(x = "topright", legend = c("EPMF", "Poisson aproximation"),
       #col = c("blue", "green"),
 ```
+
+It needs to be pointed out that even though i tried to fit a poisson distribution on the data, there are no reason to believe that the data is actually poisson distributed, since that would not make sence. I only tried it because data looked like it followed a similar distribution. 
